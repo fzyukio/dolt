@@ -142,6 +142,19 @@ func MultiEnvForDirectory(
 	// Load current dataDirFS and put into mr env
 	var dbName string = "dolt"
 	var newDEnv *DoltEnv = dEnv
+	var hdp HomeDirProvider
+	if dEnv == nil {
+		homedir := config.GetStringOrDefault("homedir", "")
+		if homedir == "" {
+			hdp = GetCurrentUserHomeDir
+		} else {
+			hdp = func() (string, error) {
+				return homedir, nil
+			}
+		}
+	} else {
+		hdp = dEnv.hdp
+	}
 
 	// InMemFS is used only for testing.
 	// All other FS Types should get a newly created Environment which will serve as the primary env in the MultiRepoEnv
@@ -153,7 +166,7 @@ func MultiEnvForDirectory(
 		envName := getRepoRootDir(path, string(os.PathSeparator))
 		dbName = dbfactory.DirToDBName(envName)
 
-		newDEnv = Load(ctx, GetCurrentUserHomeDir, dataDirFS, doltdb.LocalDirDoltDB, version)
+		newDEnv = Load(ctx, hdp, dataDirFS, doltdb.LocalDirDoltDB, version)
 	}
 
 	mrEnv := &MultiRepoEnv{
@@ -187,7 +200,7 @@ func MultiEnvForDirectory(
 			version = dEnv.Version
 		}
 
-		newEnv := Load(ctx, GetCurrentUserHomeDir, newFs, doltdb.LocalDirDoltDB, version)
+		newEnv := Load(ctx, hdp, newFs, doltdb.LocalDirDoltDB, version)
 		if newEnv.Valid() {
 			envSet[dbfactory.DirToDBName(dir)] = newEnv
 		} else {
