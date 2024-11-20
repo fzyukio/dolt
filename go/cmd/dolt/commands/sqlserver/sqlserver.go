@@ -211,7 +211,7 @@ func (cmd SqlServerCmd) Exec(ctx context.Context, commandStr string, args []stri
 
 	err := StartServer(newCtx, cmd.VersionStr, commandStr, args, dEnv, controller)
 	if err != nil {
-		cli.Println(color.RedString(err.Error()))
+		cli.PrintErrln(color.RedString(err.Error()))
 		return 1
 	}
 
@@ -244,7 +244,7 @@ func StartServer(ctx context.Context, versionStr, commandStr string, args []stri
 		return err
 	}
 
-	cli.PrintErrf("Starting server with Config %v\n", servercfg.ConfigInfo(serverConfig))
+	cli.Printf("Starting server with Config %v\n", servercfg.ConfigInfo(serverConfig))
 
 	startError, closeError := Serve(ctx, versionStr, serverConfig, controller, dEnv)
 	if startError != nil {
