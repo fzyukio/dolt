@@ -413,19 +413,19 @@ func ConfigureServices(
 	}
 	controller.Register(InitSuperUser)
 
-	var metListener *metricsListener
-	InitMetricsListener := &svcs.AnonService{
-		InitF: func(context.Context) (err error) {
-			labels := serverConfig.MetricsLabels()
-			metListener, err = newMetricsListener(labels, version, clusterController)
-			return err
-		},
-		StopF: func() error {
-			metListener.Close()
-			return nil
-		},
-	}
-	controller.Register(InitMetricsListener)
+	// var metListener *metricsListener
+	// InitMetricsListener := &svcs.AnonService{
+	// 	InitF: func(context.Context) (err error) {
+	// 		labels := serverConfig.MetricsLabels()
+	// 		metListener, err = newMetricsListener(labels, version, clusterController)
+	// 		return err
+	// 	},
+	// 	StopF: func() error {
+	// 		metListener.Close()
+	// 		return nil
+	// 	},
+	// }
+	// controller.Register(InitMetricsListener)
 
 	InitLockSuperUser := &svcs.AnonService{
 		InitF: func(context.Context) error {
@@ -635,7 +635,8 @@ func ConfigureServices(
 					serverConf,
 					sqlEngine.GetUnderlyingEngine(),
 					newSessionBuilder(sqlEngine, serverConfig),
-					metListener,
+					// metListener,
+					nil,
 					func(h mysql.Handler) (mysql.Handler, error) {
 						return golden.NewValidatingHandler(h, v.GoldenMysqlConnectionString(), logrus.StandardLogger())
 					},
@@ -645,7 +646,8 @@ func ConfigureServices(
 					serverConf,
 					sqlEngine.GetUnderlyingEngine(),
 					newSessionBuilder(sqlEngine, serverConfig),
-					metListener,
+					// metListener,
+					nil,
 				)
 			}
 			if errors.Is(err, server.UnixSocketInUseError) {
