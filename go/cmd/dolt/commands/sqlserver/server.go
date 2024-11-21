@@ -37,6 +37,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 	goerrors "gopkg.in/src-d/go-errors.v1"
 
 	"github.com/dolthub/dolt/go/cmd/dolt/cli"
@@ -87,13 +88,20 @@ func Serve(
 	}
 
 	ConfigureServices(serverConfig, controller, version, dEnv)
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		return controller.Start(ctx)
+	})
+	eg.Go(func() error {
+		return controller.WaitForStart()
+	})
 
-	go controller.Start(ctx)
-	err := controller.WaitForStart()
-	if err != nil {
-		return err, nil
+	startError = eg.Wait()
+	if startError != nil {
+		return
 	}
-	return nil, controller.WaitForStop()
+	closeError = controller.WaitForStop()
+	return
 }
 
 func ConfigureServices(

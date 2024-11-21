@@ -16,6 +16,7 @@ package events
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -105,6 +106,18 @@ func NewCollector(version string, emitter Emitter) *Collector {
 
 // CloseEventAndAdd closes the supplied event and adds it to the collection of events.  This method is thread safe.
 func (c *Collector) CloseEventAndAdd(evt *Event) {
+	defer func() {
+		if r := recover(); r != nil {
+			var (
+				ok  bool
+				err error
+			)
+			if err, ok = r.(error); !ok {
+				err = fmt.Errorf("Unable to start sql-server: %v", r)
+			}
+			fmt.Println(err)
+		}
+	}()
 	c.evtCh <- evt.close()
 }
 

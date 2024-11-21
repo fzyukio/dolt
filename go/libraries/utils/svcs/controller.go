@@ -207,19 +207,32 @@ func (c *Controller) Stop() {
 	<-c.stoppedCh
 }
 
-func (c *Controller) Start(ctx context.Context) error {
+func (c *Controller) Start(ctx context.Context) (err error) {
+	// defer func() {
+	// 	if r := recover(); r != nil {
+	// 		var (
+	// 			ok bool
+	// 		)
+	// 		if err, ok = r.(error); !ok {
+	// 			err = fmt.Errorf("Unable to start sql-server: %v", r)
+	// 		}
+	// 		close(c.startCh)
+	// 	}
+	// }()
+
 	c.mu.Lock()
 	if c.state != controllerState_created {
 		c.mu.Unlock()
-		return errors.New("Controller: cannot start service controller after is has been started or stopped")
+		err = errors.New("Controller: cannot start service controller after is has been started or stopped")
+		return
 	}
 	c.state = controllerState_starting
 	svcs := make([]Service, len(c.services))
 	copy(svcs, c.services)
 	c.mu.Unlock()
 	for i, s := range svcs {
-		err := s.Init(ctx)
-		if err != nil {
+		err1 := s.Init(ctx)
+		if err1 != nil {
 			for j := i - 1; j >= 0; j-- {
 				svcs[j].Stop()
 			}
@@ -229,7 +242,8 @@ func (c *Controller) Start(ctx context.Context) error {
 			close(c.startCh)
 			close(c.stoppedCh)
 			c.mu.Unlock()
-			return err
+			err = err1
+			return
 		}
 	}
 	close(c.startCh)
@@ -245,19 +259,19 @@ func (c *Controller) Start(ctx context.Context) error {
 		// We were stopped while initializing. Start shutting things down.
 		c.mu.Unlock()
 	}
-	var stopErr error
+	// var stopErr error
 	for i := len(svcs) - 1; i >= 0; i-- {
-		err := svcs[i].Stop()
-		if err != nil && stopErr == nil {
-			stopErr = err
+		err1 := svcs[i].Stop()
+		if err1 != nil && err == nil {
+			err = err1
 		}
 	}
 	c.mu.Lock()
-	if stopErr != nil {
-		c.stopErr = stopErr
+	if err != nil {
+		c.stopErr = err
 	}
 	c.state = controllerState_stopped
 	close(c.stoppedCh)
 	c.mu.Unlock()
-	return stopErr
+	return
 }
