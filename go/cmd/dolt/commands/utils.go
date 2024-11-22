@@ -115,7 +115,7 @@ func NewArgFreeCliContext(ctx context.Context, dEnv *env.DoltEnv) (cli.CliContex
 	emptyArgs, creds, _ := cli.BuildUserPasswordPrompt(emptyArgs)
 	lateBind, verr := BuildSqlEngineQueryist(ctx, dEnv.FS, mrEnv, creds, emptyArgs)
 
-	if err != nil {
+	if verr != nil {
 		return nil, verr
 	}
 	return cli.NewCliContext(argparser.NewEmptyResults(), dEnv.Config, lateBind)
