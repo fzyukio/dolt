@@ -118,7 +118,19 @@ func NewArgFreeCliContext(ctx context.Context, dEnv *env.DoltEnv) (cli.CliContex
 	if verr != nil {
 		return nil, verr
 	}
-	return cli.NewCliContext(argparser.NewEmptyResults(), dEnv.Config, lateBind)
+	decoder := ctx.Value("decoder")
+	queryTransformer := ctx.Value("queryTransformer")
+	if decoder == nil || queryTransformer == nil {
+		return cli.NewCliContext(argparser.NewEmptyResults(), dEnv.Config, lateBind)
+	}
+
+	decoderFunc, ok1 := decoder.(func(sql.Type, interface{}) (string, error))
+	queryTransformerFunc, ok2 := queryTransformer.(func(string) string)
+	if !ok1 || !ok2 {
+		return cli.NewCliContext(argparser.NewEmptyResults(), dEnv.Config, lateBind)
+	}
+
+	return cli.NewCliContextWithDecoder(argparser.NewEmptyResults(), dEnv.Config, lateBind, decoderFunc, queryTransformerFunc)
 }
 
 // BuildSqlEngineQueryist Utility function to build a local SQLEngine for use interacting with data on disk using

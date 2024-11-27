@@ -689,6 +689,9 @@ func execShell(sqlCtx *sql.Context, qryist cli.Queryist, format engine.PrintResu
 	_ = iohelp.WriteLine(cli.CliOut, welcomeMsg)
 	historyFile := filepath.Join(".sqlhistory") // history file written to working dir
 
+	decoder := cliCtx.Decoder()
+	queryTransformer := cliCtx.QueryTransformer()
+
 	db, branch, _ := getDBBranchFromSession(sqlCtx, qryist)
 	dirty := false
 	if branch != "" {
@@ -778,8 +781,10 @@ func execShell(sqlCtx *sql.Context, qryist cli.Queryist, format engine.PrintResu
 			subCtx, stop := signal.NotifyContext(initialCtx, os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
+			subCtx = context.WithValue(subCtx, "decoder", decoder)
 			sqlCtx := sql.NewContext(subCtx, sql.WithSession(sqlCtx.Session))
 
+			query = queryTransformer(query)
 			cmdType, subCmd, newQuery, err := preprocessQuery(query, lastSqlCmd, cliCtx)
 			if err != nil {
 				shell.Println(color.RedString(err.Error()))

@@ -22,6 +22,7 @@ import (
 
 	"github.com/dolthub/dolt/go/cmd/dolt/errhand"
 	"github.com/dolthub/dolt/go/libraries/doltcore/env"
+	"github.com/dolthub/dolt/go/libraries/doltcore/sqle/sqlutil"
 	"github.com/dolthub/dolt/go/libraries/utils/argparser"
 )
 
@@ -41,6 +42,8 @@ type CliContext interface {
 	GlobalArgs() *argparser.ArgParseResults
 	Config() *env.DoltCliConfig
 	QueryEngine(ctx context.Context) (Queryist, *sql.Context, func(), error)
+	Decoder() func(sqlType sql.Type, col interface{}) (string, error)
+	QueryTransformer() func(q string) string
 }
 
 // NewCliContext creates a new CliContext instance. Arguments must not be nil.
@@ -49,7 +52,19 @@ func NewCliContext(args *argparser.ArgParseResults, config *env.DoltCliConfig, l
 		return nil, errhand.VerboseErrorFromError(errors.New("Invariant violated. args, config, and latebind must be non nil."))
 	}
 
-	return LateBindCliContext{globalArgs: args, config: config, activeContext: &QueryistContext{}, bind: latebind}, nil
+	return LateBindCliContext{globalArgs: args, config: config, activeContext: &QueryistContext{}, bind: latebind, decoder: sqlutil.SqlColToStr}, nil
+}
+
+// NewCliContext creates a new CliContext instance. Arguments must not be nil.
+func NewCliContextWithDecoder(args *argparser.ArgParseResults, config *env.DoltCliConfig, latebind LateBindQueryist,
+	decoder func(sqlType sql.Type, col interface{}) (string, error),
+	queryTransformer func(q string) string,
+) (CliContext, errhand.VerboseError) {
+	if args == nil || config == nil || latebind == nil {
+		return nil, errhand.VerboseErrorFromError(errors.New("Invariant violated. args, config, and latebind must be non nil."))
+	}
+
+	return LateBindCliContext{globalArgs: args, config: config, activeContext: &QueryistContext{}, bind: latebind, decoder: decoder, queryTransformer: queryTransformer}, nil
 }
 
 type QueryistContext struct {
@@ -64,8 +79,19 @@ type LateBindCliContext struct {
 	globalArgs    *argparser.ArgParseResults
 	config        *env.DoltCliConfig
 	activeContext *QueryistContext
+	decoder       func(sqlType sql.Type, col interface{}) (string, error)
 
-	bind LateBindQueryist
+	bind             LateBindQueryist
+	queryTransformer func(q string) string
+}
+
+// Decoder implements CliContext.
+func (lbc LateBindCliContext) Decoder() func(sqlType sql.Type, col interface{}) (string, error) {
+	return lbc.decoder
+}
+
+func (lbc LateBindCliContext) QueryTransformer() func(q string) string {
+	return lbc.queryTransformer
 }
 
 // GlobalArgs returns the arguments passed before the subcommand.

@@ -26,7 +26,6 @@ import (
 
 	"github.com/dolthub/dolt/go/cmd/dolt/cli"
 	"github.com/dolthub/dolt/go/libraries/doltcore/row"
-	"github.com/dolthub/dolt/go/libraries/doltcore/sqle/sqlutil"
 	"github.com/dolthub/dolt/go/libraries/doltcore/table"
 	"github.com/dolthub/dolt/go/libraries/doltcore/table/typed/json"
 	"github.com/dolthub/dolt/go/libraries/doltcore/table/typed/parquet"
@@ -71,6 +70,9 @@ func prettyPrintResultsWithSummary(ctx *sql.Context, resultFormat PrintResultFor
 		}
 	}()
 
+	decoder := ctx.Value("decoder")
+	decoderFunc := decoder.(func(sqlType sql.Type, col interface{}) (string, error))
+
 	start := ctx.QueryTime()
 
 	// TODO: this isn't appropriate for JSON, CSV, other structured result formats
@@ -94,11 +96,15 @@ func prettyPrintResultsWithSummary(ctx *sql.Context, resultFormat PrintResultFor
 			return err
 		}
 	case FormatTabular:
-		wr = tabular.NewFixedWidthTableWriter(sqlSch, iohelp.NopWrCloser(cli.CliOut), 100)
+		fwtw := tabular.NewFixedWidthTableWriter(sqlSch, iohelp.NopWrCloser(cli.CliOut), 100)
+		fwtw.SetDecoder(decoderFunc)
+		wr = fwtw
 	case FormatNull:
 		wr = nullWriter{}
 	case FormatVertical:
-		wr = newVerticalRowWriter(iohelp.NopWrCloser(cli.CliOut), sqlSch)
+		vrw := newVerticalRowWriter(iohelp.NopWrCloser(cli.CliOut), sqlSch)
+		vrw.SetDecoder(decoderFunc)
+		wr = vrw
 	case FormatParquet:
 		var err error
 		wr, err = parquet.NewParquetRowWriter(sqlSch, iohelp.NopWrCloser(cli.CliOut))
@@ -232,6 +238,7 @@ type verticalRowWriter struct {
 	sch     sql.Schema
 	idx     int
 	offsets []int
+	decoder func(sqlType sql.Type, col interface{}) (string, error)
 }
 
 func newVerticalRowWriter(wr io.WriteCloser, sch sql.Schema) *verticalRowWriter {
@@ -267,6 +274,10 @@ func (v *verticalRowWriter) Close(ctx context.Context) error {
 	return v.wr.Close()
 }
 
+func (w *verticalRowWriter) SetDecoder(decoder func(sqlType sql.Type, col interface{}) (string, error)) {
+	w.decoder = decoder
+}
+
 var space = []byte{' '}
 
 func (v *verticalRowWriter) WriteSqlRow(ctx context.Context, r sql.Row) error {
@@ -290,7 +301,8 @@ func (v *verticalRowWriter) WriteSqlRow(ctx context.Context, r sql.Row) error {
 		if r[i] == nil {
 			str = "NULL"
 		} else {
-			str, err = sqlutil.SqlColToStr(v.sch[i].Type, r[i])
+			str, err = v.decoder(v.sch[i].Type, r[i])
+
 			if err != nil {
 				return err
 			}

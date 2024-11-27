@@ -25,7 +25,6 @@ import (
 	"github.com/fatih/color"
 
 	"github.com/dolthub/dolt/go/libraries/doltcore/diff"
-	"github.com/dolthub/dolt/go/libraries/doltcore/sqle/sqlutil"
 	"github.com/dolthub/dolt/go/libraries/doltcore/table"
 	"github.com/dolthub/dolt/go/libraries/utils/iohelp"
 )
@@ -51,6 +50,8 @@ type FixedWidthTableWriter struct {
 	wr *bufio.Writer
 	// flushedSampleBuffer records whether we've already written buffered rows to output
 	flushedSampleBuffer bool
+
+	decoder func(sqlType sql.Type, col interface{}) (string, error)
 }
 
 var _ table.SqlRowWriter = (*FixedWidthTableWriter)(nil)
@@ -81,6 +82,10 @@ func (w *FixedWidthTableWriter) seedColumnWidthsWithColumnNames() {
 		stringWidth := NewFixedWidthString(colName)
 		w.printWidths[i] = stringWidth.TotalWidth
 	}
+}
+
+func (w *FixedWidthTableWriter) SetDecoder(decoder func(sqlType sql.Type, col interface{}) (string, error)) {
+	w.decoder = decoder
 }
 
 func (w *FixedWidthTableWriter) Close(ctx context.Context) error {
@@ -218,7 +223,7 @@ func (w *FixedWidthTableWriter) stringValue(idx int, i interface{}) (string, err
 	if i == nil {
 		return "NULL", nil
 	}
-	return sqlutil.SqlColToStr(w.schema[idx].Type, i)
+	return w.decoder(w.schema[idx].Type, i)
 }
 
 func (w *FixedWidthTableWriter) writeRow(row tableRow) error {
