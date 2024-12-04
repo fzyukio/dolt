@@ -124,7 +124,7 @@ func NewArgFreeCliContext(ctx context.Context, dEnv *env.DoltEnv) (cli.CliContex
 		return cli.NewCliContext(argparser.NewEmptyResults(), dEnv.Config, lateBind)
 	}
 
-	decoderFunc, ok1 := decoder.(func(sql.Type, interface{}) (string, error))
+	decoderFunc, ok1 := decoder.(func(*sql.Column, interface{}) (string, error))
 	queryTransformerFunc, ok2 := queryTransformer.(func(string) string)
 	if !ok1 || !ok2 {
 		return cli.NewCliContext(argparser.NewEmptyResults(), dEnv.Config, lateBind)

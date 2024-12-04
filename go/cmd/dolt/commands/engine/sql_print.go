@@ -26,6 +26,7 @@ import (
 
 	"github.com/dolthub/dolt/go/cmd/dolt/cli"
 	"github.com/dolthub/dolt/go/libraries/doltcore/row"
+	"github.com/dolthub/dolt/go/libraries/doltcore/sqle/sqlutil"
 	"github.com/dolthub/dolt/go/libraries/doltcore/table"
 	"github.com/dolthub/dolt/go/libraries/doltcore/table/typed/json"
 	"github.com/dolthub/dolt/go/libraries/doltcore/table/typed/parquet"
@@ -71,7 +72,7 @@ func prettyPrintResultsWithSummary(ctx *sql.Context, resultFormat PrintResultFor
 	}()
 
 	decoder := ctx.Value("decoder")
-	decoderFunc := decoder.(func(sqlType sql.Type, col interface{}) (string, error))
+	decoderFunc := decoder.(func(sqlCol *sql.Column, colVal interface{}) (string, error))
 
 	start := ctx.QueryTime()
 
@@ -238,7 +239,7 @@ type verticalRowWriter struct {
 	sch     sql.Schema
 	idx     int
 	offsets []int
-	decoder func(sqlType sql.Type, col interface{}) (string, error)
+	decoder func(sqlCol *sql.Column, colVal interface{}) (string, error)
 }
 
 func newVerticalRowWriter(wr io.WriteCloser, sch sql.Schema) *verticalRowWriter {
@@ -274,7 +275,7 @@ func (v *verticalRowWriter) Close(ctx context.Context) error {
 	return v.wr.Close()
 }
 
-func (w *verticalRowWriter) SetDecoder(decoder func(sqlType sql.Type, col interface{}) (string, error)) {
+func (w *verticalRowWriter) SetDecoder(decoder func(sqlCol *sql.Column, colVal interface{}) (string, error)) {
 	w.decoder = decoder
 }
 
@@ -301,7 +302,11 @@ func (v *verticalRowWriter) WriteSqlRow(ctx context.Context, r sql.Row) error {
 		if r[i] == nil {
 			str = "NULL"
 		} else {
-			str, err = v.decoder(v.sch[i].Type, r[i])
+			if v.decoder != nil {
+				str, err = v.decoder(v.sch[i], r[i])
+			} else {
+				str, err = sqlutil.SqlColToStr(v.sch[i].Type, r[i])
+			}
 
 			if err != nil {
 				return err

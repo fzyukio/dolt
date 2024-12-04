@@ -66,6 +66,7 @@ func FromDoltSchema(dbName, tableName string, sch schema.Schema) (sql.PrimaryKey
 			Virtual:        col.Virtual,
 			Extra:          extra,
 		}
+		// cols[i].SetComment(col.Comment)
 		i++
 		return false, nil
 	})
