@@ -783,8 +783,9 @@ func execShell(sqlCtx *sql.Context, qryist cli.Queryist, format engine.PrintResu
 
 			subCtx = context.WithValue(subCtx, "decoder", decoder)
 			sqlCtx := sql.NewContext(subCtx, sql.WithSession(sqlCtx.Session))
-
-			query = queryTransformer(query)
+			if queryTransformer != nil {
+				query = queryTransformer(query)
+			}
 			cmdType, subCmd, newQuery, err := preprocessQuery(query, lastSqlCmd, cliCtx)
 			if err != nil {
 				shell.Println(color.RedString(err.Error()))

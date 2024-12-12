@@ -132,6 +132,7 @@ func StreamingRangeDownload(ctx context.Context, req StreamingRangeRequest) Stre
 			if err != nil {
 				return err
 			}
+			// fmt.Printf("URL is %s\n", url)
 
 			httpReq, err := http.NewRequest(http.MethodGet, url, nil)
 			if err != nil {

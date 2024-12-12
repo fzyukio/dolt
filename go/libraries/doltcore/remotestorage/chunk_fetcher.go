@@ -24,10 +24,12 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
+	eventsapi "github.com/dolthub/dolt/go/gen/proto/dolt/services/eventsapi/v1alpha1"
 	remotesapi "github.com/dolthub/dolt/go/gen/proto/dolt/services/remotesapi/v1alpha1"
 	"github.com/dolthub/dolt/go/libraries/doltcore/remotestorage/internal/pool"
 	"github.com/dolthub/dolt/go/libraries/doltcore/remotestorage/internal/ranges"
 	"github.com/dolthub/dolt/go/libraries/doltcore/remotestorage/internal/reliable"
+	"github.com/dolthub/dolt/go/libraries/events"
 	"github.com/dolthub/dolt/go/store/hash"
 	"github.com/dolthub/dolt/go/store/nbs"
 )
@@ -351,14 +353,14 @@ func newDownloads() downloads {
 	}
 }
 
-func (d downloads) Add(resp *remotesapi.DownloadLoc) {
+func (d downloads) Add(resp *remotesapi.DownloadLoc, scheme string) {
 	gr := (*GetRange)(resp.Location.(*remotesapi.DownloadLoc_HttpGetRange).HttpGetRange)
-	path := gr.ResourcePath()
+	path := gr.ResourcePath(scheme)
 	if v, ok := d.refreshes[path]; ok {
-		v.Add(resp)
+		v.Add(resp, scheme)
 	} else {
 		refresh := new(locationRefresh)
-		refresh.Add(resp)
+		refresh.Add(resp, scheme)
 		d.refreshes[path] = refresh
 	}
 	for _, r := range gr.Ranges {
@@ -366,10 +368,10 @@ func (d downloads) Add(resp *remotesapi.DownloadLoc) {
 	}
 }
 
-func toGetRange(rs []*ranges.GetRange) *GetRange {
+func toGetRange(rs []*ranges.GetRange, scheme string) *GetRange {
 	ret := new(GetRange)
 	for _, r := range rs {
-		ret.Url = r.Url
+		ret.Url = switchScheme(r.Url, scheme)
 		ret.Ranges = append(ret.Ranges, &remotesapi.RangeChunk{
 			Hash:   r.Hash,
 			Offset: r.Offset,
@@ -384,6 +386,9 @@ func fetcherDownloadRangesThread(ctx context.Context, locCh chan []*remotesapi.D
 	downloads := newDownloads()
 	pending := make([]fetchReq, 0)
 	var toSend *GetRange
+	evt := events.GetEventFromContext(ctx)
+	scheme := evt.GetAttribute(eventsapi.AttributeID_REMOTE_URL_SCHEME)
+
 	for {
 		// pending is our slice of request threads that showed up
 		// asking for a download. We range through it and try to send
@@ -398,9 +403,9 @@ func fetcherDownloadRangesThread(ctx context.Context, locCh chan []*remotesapi.D
 				if len(max) == 0 {
 					break
 				}
-				toSend = toGetRange(max)
+				toSend = toGetRange(max, scheme)
 			}
-			path := toSend.ResourcePath()
+			path := toSend.ResourcePath(scheme)
 			refresh := downloads.refreshes[path]
 
 			resp := fetchResp{
@@ -454,7 +459,7 @@ func fetcherDownloadRangesThread(ctx context.Context, locCh chan []*remotesapi.D
 				locCh = nil
 			} else {
 				for _, loc := range req {
-					downloads.Add(loc)
+					downloads.Add(loc, scheme)
 				}
 			}
 		case req := <-fetchReqCh:

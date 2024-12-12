@@ -24,6 +24,7 @@ import (
 	gmstypes "github.com/dolthub/go-mysql-server/sql/types"
 
 	"github.com/dolthub/dolt/go/cmd/dolt/cli"
+	eventsapi "github.com/dolthub/dolt/go/gen/proto/dolt/services/eventsapi/v1alpha1"
 	"github.com/dolthub/dolt/go/libraries/doltcore/branch_control"
 	"github.com/dolthub/dolt/go/libraries/doltcore/dbfactory"
 	"github.com/dolthub/dolt/go/libraries/doltcore/diff"
@@ -32,6 +33,8 @@ import (
 	"github.com/dolthub/dolt/go/libraries/doltcore/env/actions"
 	"github.com/dolthub/dolt/go/libraries/doltcore/ref"
 	"github.com/dolthub/dolt/go/libraries/doltcore/sqle/dsess"
+	"github.com/dolthub/dolt/go/libraries/events"
+	"github.com/dolthub/dolt/go/libraries/utils/earl"
 	"github.com/dolthub/dolt/go/store/datas/pull"
 )
 
@@ -125,6 +128,13 @@ func doDoltPull(ctx *sql.Context, args []string) (int, int, string, error) {
 		pullSpec.Remote = pullSpec.Remote.WithParams(map[string]string{
 			dbfactory.GRPCUsernameAuthParam: user,
 		})
+	}
+
+	evt := events.GetEventFromContext(ctx)
+	u, err := earl.Parse(pullSpec.Remote.Url)
+
+	if err == nil && u.Scheme != "" {
+		evt.SetAttribute(eventsapi.AttributeID_REMOTE_URL_SCHEME, u.Scheme)
 	}
 
 	srcDB, err := sess.Provider().GetRemoteDB(ctx, dbData.Ddb.ValueReadWriter().Format(), pullSpec.Remote, false)

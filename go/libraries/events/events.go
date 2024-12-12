@@ -75,6 +75,10 @@ func (evt *Event) SetAttribute(attID eventsapi.AttributeID, attVal string) {
 	evt.attributes[attID] = attVal
 }
 
+func (evt *Event) GetAttribute(attID eventsapi.AttributeID) string {
+	return evt.attributes[attID]
+}
+
 func (evt *Event) close() *eventsapi.ClientEvent {
 	if evt.ce == nil {
 		panic("multiple close calls for the same event.")

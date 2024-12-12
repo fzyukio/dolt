@@ -15,18 +15,22 @@
 package dprocedures
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/dolthub/go-mysql-server/sql"
 
 	"github.com/dolthub/dolt/go/cmd/dolt/cli"
+	eventsapi "github.com/dolthub/dolt/go/gen/proto/dolt/services/eventsapi/v1alpha1"
 	"github.com/dolthub/dolt/go/libraries/doltcore/branch_control"
 	"github.com/dolthub/dolt/go/libraries/doltcore/dbfactory"
 	"github.com/dolthub/dolt/go/libraries/doltcore/env"
 	"github.com/dolthub/dolt/go/libraries/doltcore/env/actions"
 	"github.com/dolthub/dolt/go/libraries/doltcore/ref"
 	"github.com/dolthub/dolt/go/libraries/doltcore/sqle/dsess"
+	"github.com/dolthub/dolt/go/libraries/events"
 	"github.com/dolthub/dolt/go/libraries/utils/argparser"
+	"github.com/dolthub/dolt/go/libraries/utils/earl"
 )
 
 // doltFetch is the stored procedure version for the CLI command `dolt fetch`.
@@ -64,6 +68,19 @@ func doDoltFetch(ctx *sql.Context, args []string) (int, error) {
 		return cmdFailure, err
 	}
 
+	evt := events.GetEventFromContext(ctx)
+	var rawCtx context.Context
+	rawCtx = ctx
+	if evt == nil {
+		evt = events.NewEvent(eventsapi.ClientEventType_FETCH)
+		rawCtx = events.NewContextForEvent(ctx, evt)
+	}
+
+	u, err := earl.Parse(remote.Url)
+	if err == nil && u.Scheme != "" {
+		evt.SetAttribute(eventsapi.AttributeID_REMOTE_URL_SCHEME, u.Scheme)
+	}
+
 	validationErr := validateFetchArgs(apr, refSpecArgs)
 	if validationErr != nil {
 		return cmdFailure, validationErr
@@ -80,14 +97,14 @@ func doDoltFetch(ctx *sql.Context, args []string) (int, error) {
 		})
 	}
 
-	srcDB, err := sess.Provider().GetRemoteDB(ctx, dbData.Ddb.ValueReadWriter().Format(), remote, false)
+	srcDB, err := sess.Provider().GetRemoteDB(rawCtx, dbData.Ddb.ValueReadWriter().Format(), remote, false)
 	if err != nil {
 		return 1, err
 	}
 
 	prune := apr.Contains(cli.PruneFlag)
 	mode := ref.UpdateMode{Force: true, Prune: prune}
-	err = actions.FetchRefSpecs(ctx, dbData, srcDB, refSpecs, defaultRefSpec, &remote, mode, runProgFuncs, stopProgFuncs)
+	err = actions.FetchRefSpecs(rawCtx, dbData, srcDB, refSpecs, defaultRefSpec, &remote, mode, runProgFuncs, stopProgFuncs)
 	if err != nil {
 		return cmdFailure, fmt.Errorf("fetch failed: %w", err)
 	}

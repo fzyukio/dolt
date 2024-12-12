@@ -214,14 +214,16 @@ func deleteRemoteBranch(ctx context.Context, toDelete, remoteRef ref.DoltRef, lo
 
 func PushToRemoteBranch(ctx context.Context, rsr env.RepoStateReader, tempTableDir string, mode ref.UpdateMode, srcRef, destRef, remoteRef ref.DoltRef, localDB, remoteDB *doltdb.DoltDB, remote env.Remote, progStarter ProgStarter, progStopper ProgStopper) error {
 	evt := events.GetEventFromContext(ctx)
+	if evt == nil {
+		evt = events.NewEvent(eventsapi.ClientEventType_PUSH)
+		ctx = events.NewContextForEvent(ctx, evt)
+	}
 
 	u, err := earl.Parse(remote.Url)
+	// cli.PrintErrf("URL is %s", remote.Url)
 
-	// TODO: why is evt nil sometimes?
-	if err == nil && evt != nil {
-		if u.Scheme != "" {
-			evt.SetAttribute(eventsapi.AttributeID_REMOTE_URL_SCHEME, u.Scheme)
-		}
+	if err == nil && u.Scheme != "" {
+		evt.SetAttribute(eventsapi.AttributeID_REMOTE_URL_SCHEME, u.Scheme)
 	}
 
 	cs, _ := doltdb.NewCommitSpec(srcRef.GetPath())
@@ -250,6 +252,7 @@ func PushToRemoteBranch(ctx context.Context, rsr env.RepoStateReader, tempTableD
 	case doltdb.ErrUpToDate, doltdb.ErrIsAhead, ErrCantFF, datas.ErrMergeNeeded, datas.ErrDirtyWorkspace, ErrShallowPushImpossible:
 		return err
 	default:
+		// cli.PrintErrf("remoteRef.(ref.RemoteRef) = %s tempTableDir=%s", remoteRef.(ref.RemoteRef).String(), tempTableDir)
 		return fmt.Errorf("%w; %s", ErrUnknownPushErr, err.Error())
 	}
 }
@@ -414,13 +417,15 @@ func FetchRemoteBranch(
 	progStopper ProgStopper,
 ) (*doltdb.Commit, error) {
 	evt := events.GetEventFromContext(ctx)
+	if evt == nil {
+		evt = events.NewEvent(eventsapi.ClientEventType_FETCH)
+		ctx = events.NewContextForEvent(ctx, evt)
+	}
 
 	u, err := earl.Parse(rem.Url)
 
-	if err == nil && evt != nil {
-		if u.Scheme != "" {
-			evt.SetAttribute(eventsapi.AttributeID_REMOTE_URL_SCHEME, u.Scheme)
-		}
+	if err == nil && u.Scheme != "" {
+		evt.SetAttribute(eventsapi.AttributeID_REMOTE_URL_SCHEME, u.Scheme)
 	}
 
 	cs, _ := doltdb.NewCommitSpec(srcRef.String())

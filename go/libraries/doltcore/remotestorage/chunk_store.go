@@ -36,8 +36,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 
+	eventsapi "github.com/dolthub/dolt/go/gen/proto/dolt/services/eventsapi/v1alpha1"
 	remotesapi "github.com/dolthub/dolt/go/gen/proto/dolt/services/remotesapi/v1alpha1"
 	"github.com/dolthub/dolt/go/libraries/doltcore/remotestorage/internal/reliable"
+	"github.com/dolthub/dolt/go/libraries/events"
 	"github.com/dolthub/dolt/go/store/atomicerr"
 	"github.com/dolthub/dolt/go/store/chunks"
 	"github.com/dolthub/dolt/go/store/hash"
@@ -354,9 +356,12 @@ func (dcs *DoltChunkStore) GetManyCompressed(ctx context.Context, hashes hash.Ha
 
 type GetRange remotesapi.HttpGetRange
 
-func (gr *GetRange) ResourcePath() string {
+func (gr *GetRange) ResourcePath(scheme string) string {
 	u, _ := url.Parse(gr.Url)
-	return fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, u.Path)
+	if scheme == "" {
+		scheme = u.Scheme
+	}
+	return fmt.Sprintf("%s://%s%s", scheme, u.Host, u.Path)
 }
 
 func (gr *GetRange) Append(other *GetRange) {
@@ -417,9 +422,11 @@ func (gr *GetRange) GetDownloadFunc(ctx context.Context, stats StatsRecorder, he
 	if len(gr.Ranges) == 0 {
 		return func() error { return nil }
 	}
+	evt := events.GetEventFromContext(ctx)
+	scheme := evt.GetAttribute(eventsapi.AttributeID_REMOTE_URL_SCHEME)
 	return func() error {
 		urlF := func(lastError error) (string, error) {
-			url, err := pathToUrl(ctx, lastError, gr.ResourcePath())
+			url, err := pathToUrl(ctx, lastError, gr.ResourcePath(scheme))
 			if err != nil {
 				return "", err
 			}
@@ -506,11 +513,12 @@ type locationRefresh struct {
 	mu             sync.Mutex
 }
 
-func (r *locationRefresh) Add(resp *remotesapi.DownloadLoc) {
+func (r *locationRefresh) Add(resp *remotesapi.DownloadLoc, scheme string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.URL == "" {
 		r.URL = resp.Location.(*remotesapi.DownloadLoc_HttpGetRange).HttpGetRange.Url
+		r.URL = switchScheme(r.URL, scheme)
 	}
 	if resp.RefreshAfter == nil {
 		return
@@ -988,13 +996,23 @@ func (dcs *DoltChunkStore) httpPostUpload(ctx context.Context, post *remotesapi.
 	return HttpPostUpload(ctx, dcs.httpFetcher, post, contentHash, contentLength, body)
 }
 
+func switchScheme(urlStr string, scheme string) string {
+	if scheme == "" {
+		return urlStr
+	}
+	return strings.Replace(urlStr, "http://", scheme+"://", 1)
+}
+
 func HttpPostUpload(ctx context.Context, httpFetcher HTTPFetcher, post *remotesapi.HttpPostTableFile, contentHash []byte, contentLength int64, body io.ReadCloser) error {
 	fetcher := globalHttpFetcher
 	if httpFetcher != nil {
 		fetcher = httpFetcher
 	}
+	evt := events.GetEventFromContext(ctx)
+	scheme := evt.GetAttribute(eventsapi.AttributeID_REMOTE_URL_SCHEME)
+	urlStr := switchScheme(post.Url, scheme)
 
-	req, err := http.NewRequest(http.MethodPut, post.Url, body)
+	req, err := http.NewRequest(http.MethodPut, urlStr, body)
 	if err != nil {
 		return err
 	}
