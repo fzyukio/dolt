@@ -131,13 +131,21 @@ func doDoltPull(ctx *sql.Context, args []string) (int, int, string, error) {
 	}
 
 	evt := events.GetEventFromContext(ctx)
+	var rawCtx context.Context
+	if evt == nil {
+		evt = events.NewEvent(eventsapi.ClientEventType_PULL)
+		rawCtx = events.NewContextForEvent(ctx, evt)
+	} else {
+		rawCtx = ctx
+	}
+
 	u, err := earl.Parse(pullSpec.Remote.Url)
 
 	if err == nil && u.Scheme != "" {
 		evt.SetAttribute(eventsapi.AttributeID_REMOTE_URL_SCHEME, u.Scheme)
 	}
 
-	srcDB, err := sess.Provider().GetRemoteDB(ctx, dbData.Ddb.ValueReadWriter().Format(), pullSpec.Remote, false)
+	srcDB, err := sess.Provider().GetRemoteDB(rawCtx, dbData.Ddb.ValueReadWriter().Format(), pullSpec.Remote, false)
 	if err != nil {
 		return noConflictsOrViolations, threeWayMerge, "", fmt.Errorf("failed to get remote db; %w", err)
 	}
@@ -148,12 +156,12 @@ func doDoltPull(ctx *sql.Context, args []string) (int, int, string, error) {
 	}
 
 	// Fetch all references
-	branchRefs, err := srcDB.GetHeadRefs(ctx)
+	branchRefs, err := srcDB.GetHeadRefs(rawCtx)
 	if err != nil {
 		return noConflictsOrViolations, threeWayMerge, "", fmt.Errorf("%w: %s", env.ErrFailedToReadDb, err.Error())
 	}
 
-	_, hasBranch, err := srcDB.HasBranch(ctx, pullSpec.Branch.GetPath())
+	_, hasBranch, err := srcDB.HasBranch(rawCtx, pullSpec.Branch.GetPath())
 	if err != nil {
 		return noConflictsOrViolations, threeWayMerge, "", err
 	}
@@ -163,7 +171,7 @@ func doDoltPull(ctx *sql.Context, args []string) (int, int, string, error) {
 	}
 
 	mode := ref.UpdateMode{Force: true, Prune: false}
-	err = actions.FetchRefSpecs(ctx, dbData, srcDB, pullSpec.RefSpecs, false, &pullSpec.Remote, mode, runProgFuncs, stopProgFuncs)
+	err = actions.FetchRefSpecs(rawCtx, dbData, srcDB, pullSpec.RefSpecs, false, &pullSpec.Remote, mode, runProgFuncs, stopProgFuncs)
 	if err != nil {
 		return noConflictsOrViolations, threeWayMerge, "", fmt.Errorf("fetch failed: %w", err)
 	}
@@ -224,7 +232,7 @@ func doDoltPull(ctx *sql.Context, args []string) (int, int, string, error) {
 
 			// We allow changes to ignored tables. If this causes a conflict because the remote also modified these tables,
 			// we will detect that during the pull.
-			workingSetClean, err := diff.WorkingSetContainsOnlyIgnoredTables(ctx, roots)
+			workingSetClean, err := diff.WorkingSetContainsOnlyIgnoredTables(rawCtx, roots)
 			if err != nil {
 				return noConflictsOrViolations, threeWayMerge, "", err
 			}
@@ -247,7 +255,7 @@ func doDoltPull(ctx *sql.Context, args []string) (int, int, string, error) {
 	if err != nil {
 		return noConflictsOrViolations, threeWayMerge, "", err
 	}
-	err = actions.FetchFollowTags(ctx, tmpDir, srcDB, dbData.Ddb, runProgFuncs, stopProgFuncs)
+	err = actions.FetchFollowTags(rawCtx, tmpDir, srcDB, dbData.Ddb, runProgFuncs, stopProgFuncs)
 	if err != nil {
 		return conflicts, fastForward, "", err
 	}

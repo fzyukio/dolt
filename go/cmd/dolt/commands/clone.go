@@ -118,7 +118,6 @@ func clone(ctx context.Context, apr *argparser.ArgParseResults, dEnv *env.DoltEn
 	}
 
 	scheme, remoteUrl, err := env.GetAbsRemoteUrl(dEnv.FS, dEnv.Config, urlStr)
-
 	if err != nil {
 		return errhand.BuildDError("error: '%s' is not valid.", urlStr).Build()
 	}
@@ -162,6 +161,11 @@ func clone(ctx context.Context, apr *argparser.ArgParseResults, dEnv *env.DoltEn
 	}
 
 	evt := events.GetEventFromContext(ctx)
+	if evt == nil {
+		evt = events.NewEvent(eventsapi.ClientEventType_PUSH)
+		ctx = events.NewContextForEvent(ctx, evt)
+	}
+
 	u, err := earl.Parse(remoteUrl)
 	if err == nil {
 		if u.Scheme != "" {
@@ -187,7 +191,6 @@ func parseArgs(apr *argparser.ArgParseResults) (string, string, errhand.VerboseE
 
 	urlStr := apr.Arg(0)
 	_, err := earl.Parse(urlStr)
-
 	if err != nil {
 		return "", "", errhand.BuildDError("error: invalid remote url: " + urlStr).Build()
 	}
@@ -225,7 +228,6 @@ func createRemote(ctx context.Context, remoteName, remoteUrl string, params map[
 // would return 'user/test/pulls' and eventually error later in the code base.
 func validateAndParseDolthubUrl(urlStr string) (string, bool) {
 	u, err := earl.Parse(urlStr)
-
 	if err != nil {
 		return "", false
 	}
