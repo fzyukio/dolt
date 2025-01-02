@@ -72,7 +72,12 @@ func prettyPrintResultsWithSummary(ctx *sql.Context, resultFormat PrintResultFor
 	}()
 
 	decoder := ctx.Value("decoder")
-	decoderFunc := decoder.(func(sqlCol *sql.Column, colVal interface{}) (string, error))
+	var decoderFunc func(sqlCol *sql.Column, colVal interface{}) (string, error)
+	if decoder != nil {
+		decoderFunc = decoder.(func(sqlCol *sql.Column, colVal interface{}) (string, error))
+	} else {
+		decoderFunc = nil
+	}
 
 	start := ctx.QueryTime()
 
