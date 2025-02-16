@@ -256,7 +256,10 @@ func (cmd SqlCmd) Exec(ctx context.Context, commandStr string, args []string, dE
 
 			// initialize fileReadProg global variable if there is a file to process queries from
 			fileReadProg = &fileReadProgress{bytesRead: 0, totalBytes: info.Size(), printed: 0, displayStrLen: 0}
-			defer fileReadProg.close()
+			defer func() {
+				fileReadProg.close()
+				fileReadProg = nil
+			}()
 		}
 
 		if isTty {
