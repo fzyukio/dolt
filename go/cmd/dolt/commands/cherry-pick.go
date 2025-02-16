@@ -202,6 +202,10 @@ hint: commit your changes (dolt commit -am \"<message>\") or reset them (dolt re
 			return fmt.Errorf("error: failed to get commit metadata for ref '%s': %v", commitHash, err)
 		}
 
+		if cli.ExecuteWithStdioRestored == nil {
+			return nil
+		}
+
 		cli.ExecuteWithStdioRestored(func() {
 			pager := outputpager.Start()
 			defer pager.Stop()
